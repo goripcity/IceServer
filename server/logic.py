@@ -21,5 +21,4 @@ class BaseLogic(object):
 
 
 
-
 __all__ = ['BaseLogic']

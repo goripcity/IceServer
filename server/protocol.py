@@ -20,6 +20,11 @@ class Protocol(object):
 
 
     def parse(self, data):
+        """
+            datastream parse
+            return result, dataleft, True/False (continue parse?)
+        """
+
         result = data
         return result, '',  False
 

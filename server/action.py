@@ -1,5 +1,7 @@
 #coding=utf-8
 
+import sys, errno
+
 from log import log
 from schedule import *
 from protocol import Protocol
@@ -7,6 +9,10 @@ from logic import *
 from conn import *
 
 class TcpServerAction(object):
+    """
+        action for tcpserver:
+            listen, recv, and response
+    """
     def __init__(self, listen_addr, name = ''):
         self.addr = listen_addr
         self.server = None
@@ -24,11 +30,13 @@ class TcpServerAction(object):
 
 
     def tcp_listen(self):
+        """ register tcp listen in server"""
         fd = self.server.tcp_listen(self.addr)
         self.server.wait_read(fd, self.event_tcplisten)
 
 
     def event_tcplisten(self, fd):
+        """ event tcplisten callback """
         fd, addr = self.server.event_tcplisten(fd)
         if fd == -1:
             return 
@@ -58,6 +66,7 @@ class TcpServerAction(object):
 
     @logic_schedule(True)
     def new_connection(self, fd):
+        """ dealing new accepted connection """
         status = yield self.protocol.handshake(fd)
         if status == False:
             yield creturn()
@@ -88,6 +97,10 @@ class TcpServerAction(object):
     
 
 class TcpClientAction(object):
+    """
+        action for tcp client:
+            send request and get response, such as memcache and db
+    """
     def __init__(self, connect_addr, name, num = 3):
         self.addr = connect_addr
         self.server = None
@@ -111,6 +124,8 @@ class TcpClientAction(object):
 
     @logic_schedule(True)
     def create_pool(self):
+        """ create a connection pool """
+        
         while len(self.conn_pool) < self.num:
             fd = yield self.connect(self.addr)
             if fd == -1:
@@ -152,6 +167,7 @@ class TcpClientAction(object):
 
     @logic_schedule()
     def request(self, data):
+        """ send request and get response """
         if len(self.conn_pool):
             fd = self.conn_pool.pop()
         else:

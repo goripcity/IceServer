@@ -5,6 +5,11 @@ from schedule import *
 
 
 class Connections(object):
+    """
+        connnetions manager, save fd, actions
+        logic can use action's method through this class
+    """
+
     def __init__(self):
         self.log = log
         self.name_actions = {}
@@ -12,6 +17,7 @@ class Connections(object):
 
 
     def save(self, action):
+        """ save action by name """
         self.name_actions[action.name] = action
 
 
@@ -20,6 +26,7 @@ class Connections(object):
 
     
     def save_fd(self, fd, action):
+        """ fd, action map """
         self.fd_actions[fd] = action
 
 
@@ -29,6 +36,7 @@ class Connections(object):
 
     @logic_schedule()
     def sending(self, fd, data):
+        """ try to use action's sending """
         action = self.fd_actions.get(fd)
         if action == None:
             yield creturn(False)
@@ -39,6 +47,7 @@ class Connections(object):
                 
     @logic_schedule()
     def recving(self, fd):
+        """ try to use action's recving """
         action = self.fd_actions.get(fd)
         if action == None:
             yield creturn('', True)
@@ -47,7 +56,7 @@ class Connections(object):
         yield creturn(result)
 
 
-
-
-
 conn = Connections()
+
+
+__all__ = ['conn']

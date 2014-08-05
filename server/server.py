@@ -12,7 +12,6 @@ from schedule import *
 from conn import conn
 
 
-
 BUFSIZ = 8092
 MAXPACKET = 2 << 19
 LISTEN_LIST = 1024
@@ -20,11 +19,12 @@ LISTEN_LIST = 1024
 
 
 class IceServer(object):
-    def __init__(self):
-        """
-            addr: tcp listen address
-        """
+    """
+        IceServer
+            event-driven with epoll
 
+    """
+    def __init__(self):
         self.epoll = select.epoll()             #epoll
         self.log = log                          #log
         self.polltime = -1                      #epoll wait time
@@ -37,7 +37,7 @@ class IceServer(object):
 
 
     def tcp_listen(self, addr):
-        """ register tcp listen event """
+        """ create a tcp listen socket """
 
         try:
             listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -59,7 +59,7 @@ class IceServer(object):
 
     
     def event_tcplisten(self, fd):
-        """event tcp listen handler"""
+        """ event readable, tcp listen handler """
         try:
             conn, addr = self.socks[fd][0].accept()
         except socket.error, msg:
@@ -71,6 +71,11 @@ class IceServer(object):
 
 
     def register_newconnection(self, sock, addr):
+        """
+            register new accepted connection to epoll
+            noblock, keepalive, saveinfo
+        """
+        
         fd = sock.fileno()
         sock.setblocking(0)
         set_keepalive(sock)
@@ -83,6 +88,8 @@ class IceServer(object):
 
         
     def wait_read(self, fd, callback):
+        """ register readable event, such as tcp listen ready"""
+            
         self.callbacks[fd] = (callback, (fd,))
         self.epoll.register(fd, select.EPOLLIN)
     
@@ -112,8 +119,13 @@ class IceServer(object):
                     (self.log.info, ("%s write callback miss" % fd, )))
                 callback(*args)
 
+
     
     def add_action(self, action):
+        """
+            action: TcpServerAction TcpClientAction instance
+        """
+
         self.actions.append(action)
         action.server = self
         if hasattr(action, 'tcp_listen'):
@@ -124,22 +136,29 @@ class IceServer(object):
 
 
     def event_read(self, fd):
+        """ modify tcp fd readable event """
         self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
         self.callbacks[fd] = (self.event_tcprecv, (fd, self.schedule.current_uid))
 
 
 
-    def event_tcprecv(self, fd, uuid):
+    def event_tcprecv(self, fd, uid):
+        """ tcp read callback """
         recvdata = ''
         loop = 1 
         while loop:
             loop, recvdata, isclosed = self.tcp_read(fd, recvdata)
 
-        self.schedule.run(uuid, (recvdata, isclosed))
+        self.schedule.run(uid, (recvdata, isclosed))
         
     
    
     def tcp_read(self, fd, recvdata):
+        """ 
+            nonblocking tcp read 
+            return True/False(need continue?), data, True/False(is fd closed?)
+        """
+        
         sock = self.socks[fd][0]
         try:
             data = sock.recv(BUFSIZ)
@@ -180,11 +199,13 @@ class IceServer(object):
 
 
     def __kill_it(self, conn):
+        """ send rst """
         set_linger(conn, 1, 0)        
         conn.close()
 
         
     def event_write(self, fd, data):
+        """ modify tcp fd writeable event """
         uid = self.schedule.current_uid
         self.epoll.modify(fd, select.EPOLLOUT | select.EPOLLET)
         self.callbacks[fd] = (self.event_tcpsend, (fd,))
@@ -192,6 +213,7 @@ class IceServer(object):
 
     
     def event_tcpsend(self, fd):
+        """ nonblocking tcp send, stop if error occurs, go to schedule if done """
         sendlist = self.sendlist[fd]
         sock = self.socks[fd][0]
 
@@ -242,6 +264,8 @@ class IceServer(object):
 
 
     def reg_tcp_connect(self, addr):
+        """ register nonblocking tcp connect """
+
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             fd = sock.fileno()
@@ -260,12 +284,14 @@ class IceServer(object):
 
 
     def wait_write(self, fd, callback):
+        """ register writeable event, such as tcp connect ready"""
         self.callbacks[fd] = (callback, (fd, self.schedule.current_uid))
         self.epoll.register(fd, select.EPOLLOUT| select.EPOLLET)
 
 
 
     def event_tcpconnect(self, fd, suid):
+        """ nonblocking tcp connect callback """
         sock = self.socks[fd][0]
         err_no = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
         if err_no == 0:

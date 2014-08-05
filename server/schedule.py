@@ -1,13 +1,15 @@
 
 #coding=utf-8
 
-import sys, errno
 from log import log
 from uuid import uuid1
 from functools import wraps
 
 
 class LogicSchedule():
+    """
+        Single thread logic schedule
+    """
     def __init__(self):
         self.logic_streams = {}     
         self.current_uid = None
@@ -21,7 +23,7 @@ class LogicSchedule():
         else:
             self.current_uid = uid 
 
-        self.log.debug("[%s]: jion func %s" % (uid, logic_func))
+        #self.log.debug("[%s]: jion func %s" % (uid, logic_func))
         streams = self.logic_streams.get(uid, []) 
         if streams:
             streams.append(logic_func)
@@ -39,13 +41,13 @@ class LogicSchedule():
         streams = self.logic_streams.get(self.current_uid, False)
 
         if streams:
-            self.log.debug('[%s]: pop' % self.current_uid)
+            #self.log.debug('[%s]: pop' % self.current_uid)
             streams.pop()
 
 
 
     def run(self, uid, data):
-        self.log.debug('schedule running')
+        #self.log.debug('schedule running')
         if uid == None:
             uid = self.current_uid 
         else:
@@ -61,14 +63,15 @@ class LogicSchedule():
             else:
                 logic_func = streams[-1]
                 
-            self.log.debug('[%s]: run %s' % (uid, logic_func))
+            #self.log.debug('[%s]: run %s' % (uid, logic_func))
 
-            if self.return_data:
+            if self.return_data != None:
                 data = self.return_data         
                 self.return_data = None
 
             result = logic_func.send(data)
 
+            #maybe change in every logic_func
             if self.return_data == None:
                 break
                 
@@ -77,10 +80,6 @@ class LogicSchedule():
 
 
 g_logic_schedule = LogicSchedule()
-
-
-def schedule_init(log):
-    g_logic_schedule.init(log)
 
 
 def coroutine(func):
@@ -97,17 +96,20 @@ def logic_schedule(new_logic = False):
         @wraps(func)        
         def logic_func(*args):
 
+            #make generator
             generator = func(*args)    
 
+            #gen uid
             uid = None
             if new_logic:
                 uid = uuid1().hex
 
+            #join schedule
             g_logic_schedule.join(generator, uid)
 
             if new_logic:
                 result = g_logic_schedule.run(uid, None)
-            else:
+            else: #avoid generator nested
                 result = generator.next()
 
             return result
@@ -130,3 +132,5 @@ def creturn(*args):
     g_logic_schedule.creturn(data)
 
 
+
+__all__ = ['logic_schedule', 'creturn', 'g_logic_schedule']
