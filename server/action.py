@@ -55,6 +55,7 @@ class TcpServerAction(object):
     def recving(self, uid):
         """ return data, True/False (fd is closed?) """
         status, data = self.server.event_read(uid)
+        print status, data
         if status == 1 :
             data = yield status
         elif status == -1:
@@ -95,12 +96,13 @@ class TcpServerAction(object):
         recvdata = ''
  
         while 1:
+            print 'waiting here'
             data, isclosed = yield self.recving(uid)
             recvdata += data
             
             if isclosed:
                 self.logic.close(uid)
-                break
+                yield creturn()
 
             loop = 1
             while loop:
@@ -122,7 +124,7 @@ class TcpClientAction(object):
         action for tcp client:
             send request and get response, such as memcache and db
     """
-    def __init__(self, connect_addr, name, num = 3):
+    def __init__(self, connect_addr, name, num = 1):
         self.addr = connect_addr
         self.server = None
         self.name = name
@@ -130,7 +132,7 @@ class TcpClientAction(object):
         self.log = log
         self.protocol = Protocol()
         self.logic = BaseLogic()
-        self.conn_pool = []
+        self.conn_pool = None
         self.wait_list = []
         conn.save(self)
 
@@ -146,20 +148,22 @@ class TcpClientAction(object):
     @logic_schedule(True)
     def create_pool(self):
         """ create a connection pool """
+        conn_pool = []
         
-        while len(self.conn_pool) < self.num:
+        while len(conn_pool) < self.num:
             fd = yield self.connect(self.addr)
             if fd == -1:
-                #TODO wait event
-                import time
-                time.sleep(10)
+                yield self.server.set_timer(schedule_sleep(5))
+                continue
 
             status = yield self.protocol.handshake(fd)
             if status == False:
-                #TODO
-                pass
+                yield self.server.set_timer(schedule_sleep(5))
+                continue
 
-            self.conn_pool.append(fd)
+            conn_pool.append(fd)
+       
+        self.conn_pool = conn_pool
 
         yield creturn()
 
@@ -191,14 +195,15 @@ class TcpClientAction(object):
     @logic_schedule()
     def request(self, data):
         """ send request and get response """
-        if len(self.conn_pool):
-            uid = self.conn_pool.pop()
-        else:
-            #TODO
-            pass
+        SIGNAL = self.name + 'requestfd'
+        if len(self.conn_pool) == 0:
+            yield schedule_waitsignal(SIGNAL)
+
+        uid = self.conn_pool.pop()
 
         status = yield self.sending(uid, data)
         if status == False:
+            yield self.repair(SIGNAL)
             yield creturn(False, None)
 
         recvdata = ''
@@ -206,9 +211,11 @@ class TcpClientAction(object):
         while 1:
             data, isclosed = yield self.recving(uid)
             recvdata += data
+
             
             if isclosed:
-                self.logic.close(fd)
+                self.logic.close(uid)
+                yield self.repair(SIGNAL)
                 yield creturn(False, None)
 
             loop = 1
@@ -219,14 +226,28 @@ class TcpClientAction(object):
                 break
         
         
+        schedule_notify(SIGNAL)
         self.conn_pool.append(uid)
         yield creturn(True, data)
+
+
+    @logic_schedule()
+    def repair(self, SIGNAL):
+        uid = -1
+        while uid == -1:
+            yield self.server.set_timer(schedule_sleep(5))
+            uid = yield self.connect(self.addr)
+
+        schedule_notify(SIGNAL)
+        self.conn_pool.append(uid)
+        yield creturn()
 
 
     @logic_schedule()
     def recving(self, uid):
         """ return data, True/False (fd is closed?) """
         status, data = self.server.event_read(uid)
+        print 'reg uid ', uid
         if status == 1 :
             data = yield status
         elif status == -1:

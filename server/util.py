@@ -3,6 +3,28 @@
 import socket
 import struct
 
+class Timer(object):
+    """ timer object """
+    def __init__(self, elapse, func, *args):
+        self.func = func
+        self.args = args
+        self.times = 1
+        self.elapse = elapse
+
+    def set_times(self, times):
+        self.times = times
+
+    def run(self):
+        if self.times == 0:
+            return 0
+        elif self.times != -1:
+            self.times -= 1
+        self.func(*self.args)
+        return self.times
+
+    def remove(self):
+        self.times = 0
+
 
 def tcp_connect(addr):
     """tcp connect，return socket or None"""

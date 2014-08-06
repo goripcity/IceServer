@@ -3,6 +3,7 @@
 from log import log
 from uuid import uuid1
 from functools import wraps
+from util import Timer
 
 
 class LogicSchedule():
@@ -11,6 +12,8 @@ class LogicSchedule():
     """
     def __init__(self):
         self.logic_streams = {}     
+        self.signal_wait = {}
+        self.signal_pending = {}
         self.current_uid = None
         self.return_data = None
         self.log = log 
@@ -60,7 +63,7 @@ class LogicSchedule():
 
         while True:
             if len(streams) == 0:
-                del self.logic_streams[self.current_uid]
+                self.clear(uid)
                 self.return_data = None
                 return
             else:
@@ -82,6 +85,39 @@ class LogicSchedule():
 
 
 
+    def waitsignal(self, signame):
+        if self.signal_wait.has_key(signame):
+            self.signal_wait[signame].append(self.current_uid)
+        else:
+            self.signal_wait[signame] = [self.current_uid]
+
+
+    def notify(self, signame):
+        wlist = self.signal_wait.get(signame)
+        if not wlist:
+            return 
+
+        uid = wlist.pop()
+        self.signal_pending[uid] = signame 
+         
+
+    def signal_handle(self):
+        if not self.signal_pending:
+            return 
+
+        for uid, signame in self.signal_pending.items():
+            self.run(uid, signame)    
+        self.signal_pending = {}
+        
+
+
+    def clear(self, uid):
+        if self.logic_streams.has_key(uid):
+            del self.logic_streams[uid]
+
+    
+
+        
 g_logic_schedule = LogicSchedule()
 
 
@@ -123,6 +159,18 @@ def logic_schedule(new_logic = False):
 
 
 
+def schedule_sleep(sec):
+    return Timer(sec, g_logic_schedule.run, g_logic_schedule.current_uid, None)
+    
+    
+def schedule_waitsignal(signame):
+    g_logic_schedule.waitsignal(signame)
+    
+    
+def schedule_notify(signame):
+    g_logic_schedule.notify(signame)
+
+
 def creturn(*args):
     lenth = len(args)
     if lenth == 0:
@@ -136,4 +184,5 @@ def creturn(*args):
 
 
 
-__all__ = ['logic_schedule', 'creturn', 'g_logic_schedule']
+__all__ = ['logic_schedule', 'creturn', 'g_logic_schedule', 'schedule_sleep', 
+            'schedule_waitsignal', 'schedule_notify']

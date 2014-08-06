@@ -7,7 +7,7 @@ import time
 from heapq import heappop, heappush
 
 
-from util import set_linger, set_keepalive
+from util import set_linger, set_keepalive, Timer
 from log import log
 from action import *
 from schedule import *
@@ -17,29 +17,6 @@ from conn import conn
 BUFSIZ = 8092
 MAXPACKET = 2 << 19
 LISTEN_LIST = 1024
-
-
-class Timer(object):
-    """ timer object """
-    def __init__(self, elapse, func, *args):
-        self.func = func
-        self.args = args
-        self.times = 1
-        self.elapse = elapse
-
-    def set_times(self, times):
-        self.times = times
-
-    def run(self):
-        if self.times == 0:
-            return 0
-        elif self.times != -1:
-            self.times -= 1
-        self.func(*self.args)
-        return self.times
-
-    def remove(self):
-        self.times = 0
 
     
 
@@ -159,10 +136,11 @@ class IceServer(object):
                 
             del self.timer_info[hit]
             
-
+        return -1
 
     def before_event(self):
         """ run before event wait """
+        self.schedule.signal_handle()
         self.polltime = self.run_timer()
 
 
@@ -173,6 +151,7 @@ class IceServer(object):
             if select.EPOLLIN & events:  # readable
                 callback, args = self.callbacks.get(fd, \
                     (self.log.info, ("%s read callback miss" % fd, )))
+                print callback, args
                 callback(*args)
 
             elif select.EPOLLOUT & events: # writeable
@@ -231,10 +210,12 @@ class IceServer(object):
         while loop:
             loop, recvdata, isclosed = self.tcp_read(fd, recvdata)
 
-        self.recvbuf[fd] += recvdata
+        if not isclosed:
+            self.recvbuf[fd] += recvdata
 
         uid = self.wait_readevent.get(fd)
 
+        print uid
         if uid:
             del self.wait_readevent[fd]
             self.schedule.run(uid, (self.recvbuf[fd], isclosed))
@@ -290,11 +271,14 @@ class IceServer(object):
             del self.callbacks[fd]
 
         uid = self.maps.get(fd) 
+        print 'clean uid', uid
         if uid:
             del self.maps[fd]
             del self.maps[uid]
             conn.clear_uid(uid)
+
         if self.wait_readevent.has_key(fd):
+            self.schedule.run(self.wait_readevent[fd], ('', True))
             del self.wait_readevent[fd]
 
 
