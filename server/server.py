@@ -2,7 +2,9 @@
 
 import socket
 import select, errno
-import os, sys 
+import os, sys
+import time
+from heapq import heappop, heappush
 
 
 from util import set_linger, set_keepalive
@@ -17,6 +19,29 @@ MAXPACKET = 2 << 19
 LISTEN_LIST = 1024
 
 
+class Timer(object):
+    """ timer object """
+    def __init__(self, elapse, func, *args):
+        self.func = func
+        self.args = args
+        self.times = 1
+        self.elapse = elapse
+
+    def set_times(self, times):
+        self.times = times
+
+    def run(self):
+        if self.times == 0:
+            return 0
+        elif self.times != -1:
+            self.times -= 1
+        self.func(*self.args)
+        return self.times
+
+    def remove(self):
+        self.times = 0
+
+    
 
 class IceServer(object):
     """
@@ -37,7 +62,10 @@ class IceServer(object):
         self.maps = {}                          #save {fd: uid, uid: fd}
         self.wait_readevent = {}                #save schedule uid which is 
                                                 #waiting for read event {fd: uid} 
-
+        
+        self.timer_heap = []                    #timer minheap
+        self.timer_info = {}                    #timer info  key = time
+                                                #            value = [Timer() ...]
 
 
     def tcp_listen(self, addr):
@@ -101,11 +129,41 @@ class IceServer(object):
         while True:
             self.before_event()
             self.event_wait()
-    
+  
+
+    def set_timer(self, timer):
+        hit = time.time() + timer.elapse
+        heappush(self.timer_heap, hit)
+        if self.timer_info.has_key(hit):
+            self.timer_info[hit].append(timer)
+        else:
+            self.timer_info[hit] = [timer]
+        
+
+    def run_timer(self):
+        if self.timer_heap == []:
+            return -1
+
+        while len(self.timer_heap) != 0:
+            now = time.time()
+            hit = self.timer_heap[0]
+            if now < hit:
+                return hit - now
+
+            #run timer
+            heappop(self.timer_heap)
+            timers = self.timer_info[hit]
+            for timer in timers:
+                if timer.run():
+                    self.set_timer(timer)
+                
+            del self.timer_info[hit]
+            
+
 
     def before_event(self):
         """ run before event wait """
-        pass
+        self.polltime = self.run_timer()
 
 
     def event_wait(self):
@@ -373,7 +431,7 @@ class IceServer(object):
       
 
 
-__all__ = ['IceServer']
+__all__ = ['IceServer', 'Timer']
 
 
 
