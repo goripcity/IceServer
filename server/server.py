@@ -159,7 +159,6 @@ class IceServer(object):
             self.recvbuf[fd] = ''
             return 0, buf
         else:
-            print 'event wait'
             self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
             self.callbacks[fd] = (self.event_tcprecv, (fd,))
             self.wait_readevent[fd] = self.schedule.current_uid
