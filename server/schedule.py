@@ -1,4 +1,3 @@
-
 #coding=utf-8
 
 from log import log
@@ -50,10 +49,14 @@ class LogicSchedule():
         #self.log.debug('schedule running')
         if uid == None:
             uid = self.current_uid 
+        elif uid == -1:
+            return 
         else:
             self.current_uid = uid
     
         streams = self.logic_streams.get(uid, False)
+        if not streams:
+            return 
 
         while True:
             if len(streams) == 0:

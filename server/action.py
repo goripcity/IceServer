@@ -35,62 +35,83 @@ class TcpServerAction(object):
         self.server.wait_read(fd, self.event_tcplisten)
 
 
+    @logic_schedule(True)
     def event_tcplisten(self, fd):
         """ event tcplisten callback """
         fd, addr = self.server.event_tcplisten(fd)
         if fd == -1:
-            return 
+            yield creturn() 
 
-        conn.save_fd(fd, self)
+        uid = self.server.maps_save(fd)
+        conn.save_uid(uid, self)
         self.log.debug("%s: Accept connection from %s, %d, fd = %d" \
                         % (self.name, addr[0], addr[1], fd)) 
         
-        self.new_connection(fd)
+        yield self.new_connection(uid)
+        yield creturn()
 
 
     @logic_schedule()
-    def recving(self, fd):
-        data = yield self.server.event_read(fd)
-        self.log.debug("[%s] fd :[%s] received :%s" % (self.name, fd, data[0]))
+    def recving(self, uid):
+        """ return data, True/False (fd is closed?) """
+        status, data = self.server.event_read(uid)
+        if status == 1 :
+            data = yield status
+        elif status == -1:
+            yield creturn('', True)
+        elif status == 0:
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data))
+            yield creturn(data, False)
+            
+        if data[0]:
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data[0]))
         yield creturn(data)
         
 
     @logic_schedule()
-    def sending(self, fd, data):
-        status = yield self.server.event_write(fd, self.protocol.packet(data))
+    def sending(self, uid, data):
+        """ return True/False """
+        status = self.server.event_write(uid, self.protocol.packet(data))
         if status:
-            self.log.debug("[%s] fd :[%s] send done :%s" % (self.name, fd, data))
-        yield creturn(status)
+            result = yield status
+        else:
+            yield creturn(False)
+            
+        if result:
+            self.log.debug("[%s] :[%s] send done :%s" % (self.name, uid, data))
+
+        yield creturn(result)
 
 
 
-    @logic_schedule(True)
-    def new_connection(self, fd):
+    @logic_schedule()
+    def new_connection(self, uid):
         """ dealing new accepted connection """
-        status = yield self.protocol.handshake(fd)
+
+        status = yield self.protocol.handshake(uid)
         if status == False:
             yield creturn()
 
         recvdata = ''
  
         while 1:
-            data, isclosed = yield self.recving(fd)
+            data, isclosed = yield self.recving(uid)
             recvdata += data
             
             if isclosed:
-                self.logic.close(fd)
+                self.logic.close(uid)
                 break
 
             loop = 1
             while loop:
                 result, recvdata, loop = self.protocol.parse(recvdata)
                     
-                data = yield self.logic.dispatch(result, fd)
+                data = yield self.logic.dispatch(result, uid)
                 if data:
-                    yield self.sending(fd, data)
+                    yield self.sending(uid, data)
                 
         
-        yield self.protocol.close(fd)
+        yield self.protocol.close(uid)
 
         yield creturn()
 
@@ -152,7 +173,6 @@ class TcpClientAction(object):
             yield creturn(fd)
 
         self.log.debug("[%s] fd: [%d] Try to connect %s" % (self.name, fd, addr))
-        conn.save_fd(fd, self)
         err_no = yield fd
 
         if err_no in (errno.ECONNREFUSED, errno.ETIMEDOUT):
@@ -160,28 +180,31 @@ class TcpClientAction(object):
                             % (self.name, self.addr))
             yield creturn(-1)
 
+
+        uid = self.server.maps_save(fd)
+        conn.save_uid(uid, self)
         self.log.debug("[%s] fd: [%d] Connect to %s success" % (self.name, fd, addr))
      
-        yield creturn(fd)
+        yield creturn(uid)
 
 
     @logic_schedule()
     def request(self, data):
         """ send request and get response """
         if len(self.conn_pool):
-            fd = self.conn_pool.pop()
+            uid = self.conn_pool.pop()
         else:
             #TODO
             pass
 
-        status = yield self.sending(fd, data)
+        status = yield self.sending(uid, data)
         if status == False:
             yield creturn(False, None)
 
         recvdata = ''
  
         while 1:
-            data, isclosed = yield self.recving(fd)
+            data, isclosed = yield self.recving(uid)
             recvdata += data
             
             if isclosed:
@@ -191,29 +214,45 @@ class TcpClientAction(object):
             loop = 1
             result, _, _ = self.protocol.parse(recvdata)
                     
-            data = yield self.logic.dispatch(result, fd)
+            data = yield self.logic.dispatch(result, uid)
             if result:
                 break
         
         
-        self.conn_pool.append(fd)
+        self.conn_pool.append(uid)
         yield creturn(True, data)
 
 
     @logic_schedule()
-    def recving(self, fd):
-        data = yield self.server.event_read(fd)
-        self.log.debug("[%s] fd :[%s] received :%s" % (self.name, fd, data[0]))
+    def recving(self, uid):
+        """ return data, True/False (fd is closed?) """
+        status, data = self.server.event_read(uid)
+        if status == 1 :
+            data = yield status
+        elif status == -1:
+            yield creturn('', True)
+        elif status == 0:
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data))
+            yield creturn(data, False)
+            
+        if data[0]:
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data[0]))
         yield creturn(data)
         
 
     @logic_schedule()
-    def sending(self, fd, data):
-        status = yield self.server.event_write(fd, self.protocol.packet(data))
+    def sending(self, uid, data):
+        """ return True/False """
+        status = self.server.event_write(uid, self.protocol.packet(data))
         if status:
-            self.log.debug("[%s] fd :[%s] send done :%s" % (self.name, fd, data))
-        yield creturn(status)
+            result = yield status
+        else:
+            yield creturn(False)
+            
+        if result:
+            self.log.debug("[%s] :[%s] send done :%s" % (self.name, uid, data))
 
+        yield creturn(result)
 
 
 __all__ = ['TcpServerAction', 'TcpClientAction']

@@ -11,12 +11,12 @@ class BaseLogic(object):
 
 
     @logic_schedule()
-    def dispatch(self, result, fd):
+    def dispatch(self, result, uid):
         yield creturn(result)
 
 
     @logic_schedule()
-    def close(self, fd):
+    def close(self, uid):
         yield creturn()
 
 

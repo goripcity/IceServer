@@ -6,14 +6,14 @@ from schedule import *
 
 class Connections(object):
     """
-        connnetions manager, save fd, actions
+        connnetions manager, save uid, actions
         logic can use action's method through this class
     """
 
     def __init__(self):
         self.log = log
         self.name_actions = {}
-        self.fd_actions = {}
+        self.uid_actions = {}
 
 
     def save(self, action):
@@ -25,34 +25,34 @@ class Connections(object):
         return self.name_actions.get(name)
 
     
-    def save_fd(self, fd, action):
-        """ fd, action map """
-        self.fd_actions[fd] = action
+    def save_uid(self, uid, action):
+        """ uid, action map """
+        self.uid_actions[uid] = action
 
 
-    def clear_fd(self, fd):
-        del self.fd_actions[fd]
+    def clear_uid(self, uid):
+        del self.uid_actions[uid]
         
 
     @logic_schedule()
-    def sending(self, fd, data):
+    def sending(self, uid, data):
         """ try to use action's sending """
-        action = self.fd_actions.get(fd)
+        action = self.uid_actions.get(uid)
         if action == None:
             yield creturn(False)
         
-        status = yield action.sending(fd, data)
+        status = yield action.sending(uid, data)
         yield creturn(status)
         
                 
     @logic_schedule()
-    def recving(self, fd):
+    def recving(self, uid):
         """ try to use action's recving """
-        action = self.fd_actions.get(fd)
+        action = self.uid_actions.get(uid)
         if action == None:
             yield creturn('', True)
         
-        result = yield action.recving(fd)
+        result = yield action.recving(uid)
         yield creturn(result)
 
 

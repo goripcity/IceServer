@@ -1,6 +1,6 @@
 #coding=utf-8
 
-import sys
+import os, sys
 import logging
 import logging.handlers
 
@@ -34,7 +34,7 @@ class logger:
         self.logtype = logtype
 
         if not name:
-            name = sys.argv[0].split('.')[0]
+            name = os.path.basename(sys.argv[0]).split('.')[0]
 
         debug_file = name+"-debug.log"
         error_file = name+"-error.log"

@@ -32,7 +32,11 @@ class IceServer(object):
         self.actions = []                       #save actions 
         self.callbacks = {}                     #save callbacks {fd or uid: (callback, *args)}
         self.schedule = g_logic_schedule        #global schedule
+        self.recvbuf = {}                       #save recvdata {uid: data}
         self.sendlist = {}                      #save uids {fd: [uids..]}
+        self.maps = {}                          #save {fd: uid, uid: fd}
+        self.wait_readevent = {}                #save schedule uid which is 
+                                                #waiting for read event {fd: uid} 
 
 
 
@@ -81,9 +85,8 @@ class IceServer(object):
         set_keepalive(sock)
         self.socks[fd] = (sock, addr)
         self.sendlist[fd] = []
-        self.epoll.register(fd, select.EPOLLIN | select.EPOLLET)
-
         self.log.debug("Accept connection from %s, %d, fd = %d" % (addr[0], addr[1], fd))
+        self.reg_read(fd)
         return fd, addr
 
         
@@ -135,23 +138,52 @@ class IceServer(object):
             action.create_pool()
 
 
-    def event_read(self, fd):
-        """ modify tcp fd readable event """
-        self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
-        self.callbacks[fd] = (self.event_tcprecv, (fd, self.schedule.current_uid))
+    def reg_read(self, fd):
+        """ register tcp fd readable event """
+
+        self.recvbuf[fd] = ''
+        self.epoll.register(fd, select.EPOLLIN | select.EPOLLET)
+        self.callbacks[fd] = (self.event_tcprecv, (fd,))
+
+        return True
+
+
+    def event_read(self, uid):
+        """ read form recvbuf or wait event"""
+        fd = self.maps.get(uid, -1)
+        if fd == -1:
+            return -1, None
+
+        buf = self.recvbuf[fd]
+        if buf:
+            self.recvbuf[fd] = ''
+            return 0, buf
+        else:
+            print 'event wait'
+            self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
+            self.callbacks[fd] = (self.event_tcprecv, (fd,))
+            self.wait_readevent[fd] = self.schedule.current_uid
+            return 1, None 
 
 
 
-    def event_tcprecv(self, fd, uid):
+    def event_tcprecv(self, fd):
         """ tcp read callback """
         recvdata = ''
         loop = 1 
         while loop:
             loop, recvdata, isclosed = self.tcp_read(fd, recvdata)
 
-        self.schedule.run(uid, (recvdata, isclosed))
-        
-    
+        self.recvbuf[fd] += recvdata
+
+        uid = self.wait_readevent.get(fd)
+
+        if uid:
+            del self.wait_readevent[fd]
+            self.schedule.run(uid, (self.recvbuf[fd], isclosed))
+            self.recvbuf[fd] = ''
+
+
    
     def tcp_read(self, fd, recvdata):
         """ 
@@ -195,7 +227,18 @@ class IceServer(object):
         self.epoll.unregister(fd)
         del self.sendlist[fd]
         del self.socks[fd]
-        conn.clear_fd(fd)
+        del self.recvbuf[fd]
+
+        if self.callbacks.has_key(fd):
+            del self.callbacks[fd]
+
+        uid = self.maps.get(fd) 
+        if uid:
+            del self.maps[fd]
+            del self.maps[uid]
+            conn.clear_uid(uid)
+        if self.wait_readevent.has_key(fd):
+            del self.wait_readevent[fd]
 
 
     def __kill_it(self, conn):
@@ -204,12 +247,18 @@ class IceServer(object):
         conn.close()
 
         
-    def event_write(self, fd, data):
+    def event_write(self, uid, data):
         """ modify tcp fd writeable event """
-        uid = self.schedule.current_uid
+
+        fd = self.maps.get(uid, -1)
+        if fd == -1:
+            return False
+       
         self.epoll.modify(fd, select.EPOLLOUT | select.EPOLLET)
         self.callbacks[fd] = (self.event_tcpsend, (fd,))
-        self.sendlist[fd].append((uid, data))
+        self.sendlist[fd].append((self.schedule.current_uid, data))   
+
+        return True
 
     
     def event_tcpsend(self, fd):
@@ -273,10 +322,12 @@ class IceServer(object):
             sock.connect(addr)
         except socket.error, msg:
             if msg.errno != errno.EINPROGRESS:
+                sock.close()
                 return -1
 
         self.sendlist[fd] = []
         self.socks[fd] = (sock, addr)
+        self.recvbuf[fd] = ''
         self.wait_write(fd, self.event_tcpconnect) 
         
         return fd
@@ -306,6 +357,19 @@ class IceServer(object):
         self.log.debug("Tcp_connect error [%s] : %s" % (fd, os.strerror(errno)))
         self.__kill_it(self.socks[fd][0])
         self.clear_fd(fd)
+
+
+    def maps_save(self, fd):
+        """ save fd:uid, uid:fd """
+        uid = self.schedule.current_uid
+        self.maps[fd] = uid
+        self.maps[uid] = fd
+        return uid
+
+
+    def get_uid(self):
+        """ get current schedule uid """
+        return self.schedule.current_uid
 
       
 

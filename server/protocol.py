@@ -2,20 +2,23 @@
 
 from log import log
 from schedule import *
+from conn import conn
 
 
 class Protocol(object):
     def __init__(self):
         self.log = log
+        self.conn = conn
 
 
     @logic_schedule()
-    def handshake(self, fd):
+    def handshake(self, uid):
+        """ connection handshake, close fd here if necessary """
         yield creturn(True)
 
 
     @logic_schedule()
-    def close(self, fd):
+    def close(self, uid):
         yield creturn(True)
 
 
