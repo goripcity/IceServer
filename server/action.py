@@ -1,12 +1,15 @@
 #coding=utf-8
 
 import sys, errno
+from uuid import uuid1
 
 from log import log
 from schedule import *
 from protocol import Protocol
 from logic import *
 from conn import *
+from util import Timer
+
 
 class TcpServerAction(object):
     """
@@ -55,7 +58,6 @@ class TcpServerAction(object):
     def recving(self, uid):
         """ return data, True/False (fd is closed?) """
         status, data = self.server.event_read(uid)
-        print status, data
         if status == 1 :
             data = yield status
         elif status == -1:
@@ -96,7 +98,6 @@ class TcpServerAction(object):
         recvdata = ''
  
         while 1:
-            print 'waiting here'
             data, isclosed = yield self.recving(uid)
             recvdata += data
             
@@ -132,7 +133,7 @@ class TcpClientAction(object):
         self.log = log
         self.protocol = Protocol()
         self.logic = BaseLogic()
-        self.conn_pool = None
+        self.conn_pool = []
         self.wait_list = []
         conn.save(self)
 
@@ -151,21 +152,29 @@ class TcpClientAction(object):
         conn_pool = []
         
         while len(conn_pool) < self.num:
-            fd = yield self.connect(self.addr)
-            if fd == -1:
-                yield self.server.set_timer(schedule_sleep(5))
-                continue
-
-            status = yield self.protocol.handshake(fd)
-            if status == False:
-                yield self.server.set_timer(schedule_sleep(5))
-                continue
-
-            conn_pool.append(fd)
+            uid = yield self.connection()
+            if uid != -1:
+                conn_pool.append(uid)
        
         self.conn_pool = conn_pool
 
         yield creturn()
+
+
+
+    @logic_schedule()
+    def connection(self):
+        uid = yield self.connect(self.addr)
+        if uid == -1:
+            yield self.server.set_timer(schedule_sleep(5))
+
+        status = yield self.protocol.handshake(uid)
+        if status == False:
+            yield self.server.set_timer(schedule_sleep(5))
+            uid = -1 
+
+        yield creturn(uid)
+
 
     
     @logic_schedule()
@@ -185,7 +194,8 @@ class TcpClientAction(object):
             yield creturn(-1)
 
 
-        uid = self.server.maps_save(fd)
+        uid = uuid1().hex
+        self.server.maps_save(fd, uid)
         conn.save_uid(uid, self)
         self.log.debug("[%s] fd: [%d] Connect to %s success" % (self.name, fd, addr))
      
@@ -212,9 +222,8 @@ class TcpClientAction(object):
             data, isclosed = yield self.recving(uid)
             recvdata += data
 
-            
             if isclosed:
-                self.logic.close(uid)
+                yield self.logic.close(uid)
                 yield self.repair(SIGNAL)
                 yield creturn(False, None)
 
@@ -233,21 +242,34 @@ class TcpClientAction(object):
 
     @logic_schedule()
     def repair(self, SIGNAL):
-        uid = -1
-        while uid == -1:
-            yield self.server.set_timer(schedule_sleep(5))
-            uid = yield self.connect(self.addr)
+        tm = Timer(5, self.reconnect, SIGNAL)
+        self.server.set_timer(tm)
+        yield creturn()
+
+
+    def reconnect(self, SIGNAL):
+        self._reconnect(SIGNAL)
+
+
+    @logic_schedule(True)
+    def _reconnect(self, SIGNAL):
+        while 1:
+            uid = yield self.connection()
+            if uid != -1:
+                break
 
         schedule_notify(SIGNAL)
         self.conn_pool.append(uid)
         yield creturn()
+        
+         
+        
 
 
     @logic_schedule()
     def recving(self, uid):
         """ return data, True/False (fd is closed?) """
         status, data = self.server.event_read(uid)
-        print 'reg uid ', uid
         if status == 1 :
             data = yield status
         elif status == -1:

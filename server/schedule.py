@@ -16,6 +16,7 @@ class LogicSchedule():
         self.signal_pending = {}
         self.current_uid = None
         self.return_data = None
+        self.return_flag = False
         self.log = log 
 
 
@@ -36,6 +37,7 @@ class LogicSchedule():
 
     def creturn(self, data):
         self.return_data = data
+        self.return_flag = True
         self.pop()
 
 
@@ -64,21 +66,21 @@ class LogicSchedule():
         while True:
             if len(streams) == 0:
                 self.clear(uid)
-                self.return_data = None
+                self.return_flag = False
                 return
             else:
                 logic_func = streams[-1]
                 
-            #self.log.debug('[%s]: run %s' % (uid, logic_func))
+            #self.log.debug('[%s]: run %s %s' % (uid, logic_func, self.return_flag))
 
-            if self.return_data != None:
+            if self.return_flag:
                 data = self.return_data         
-                self.return_data = None
+                self.return_flag = False
 
             result = logic_func.send(data)
 
             #maybe change in every logic_func
-            if self.return_data == None:
+            if self.return_flag == False:
                 break
                 
         return 
@@ -174,7 +176,7 @@ def schedule_notify(signame):
 def creturn(*args):
     lenth = len(args)
     if lenth == 0:
-        data = True 
+        data = None 
     elif lenth == 1:
         data = args[0]
     else:

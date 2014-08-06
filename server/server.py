@@ -151,7 +151,6 @@ class IceServer(object):
             if select.EPOLLIN & events:  # readable
                 callback, args = self.callbacks.get(fd, \
                     (self.log.info, ("%s read callback miss" % fd, )))
-                print callback, args
                 callback(*args)
 
             elif select.EPOLLOUT & events: # writeable
@@ -215,7 +214,6 @@ class IceServer(object):
 
         uid = self.wait_readevent.get(fd)
 
-        print uid
         if uid:
             del self.wait_readevent[fd]
             self.schedule.run(uid, (self.recvbuf[fd], isclosed))
@@ -271,7 +269,6 @@ class IceServer(object):
             del self.callbacks[fd]
 
         uid = self.maps.get(fd) 
-        print 'clean uid', uid
         if uid:
             del self.maps[fd]
             del self.maps[uid]
@@ -400,9 +397,10 @@ class IceServer(object):
         self.clear_fd(fd)
 
 
-    def maps_save(self, fd):
+    def maps_save(self, fd, uid = None):
         """ save fd:uid, uid:fd """
-        uid = self.schedule.current_uid
+        if uid == None:
+            uid = self.schedule.current_uid
         self.maps[fd] = uid
         self.maps[uid] = fd
         return uid
