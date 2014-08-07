@@ -79,6 +79,8 @@ class LogicSchedule():
         if not streams:
             return 
 
+        if DEBUG:
+            self.record(uid, streams[-1].__name__, 'scheduling')
 
         while True:
             if len(streams) == 0:
@@ -89,7 +91,7 @@ class LogicSchedule():
                 logic_func = streams[-1]
                 
             if DEBUG:
-                self.record(uid, logic_func.__name__, 'scheduling')
+                self.record(uid, logic_func.__name__, 'continue run')
 
             if self.return_flag:
                 data = self.return_data         
@@ -102,7 +104,7 @@ class LogicSchedule():
                 break
                 
         if DEBUG:
-            self.record(uid, logic_func.__name__, 'pause')
+            self.record(uid, logic_func.__name__, 'schedule done')
         return 
 
 
