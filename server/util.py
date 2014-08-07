@@ -1,7 +1,8 @@
 #coding=utf-8
 
-import socket
+import socket, sys
 import struct
+from uuid import uuid1
 
 class Timer(object):
     """ timer object """
@@ -58,4 +59,14 @@ def set_keepalive(sock, alive = 1):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, alive)
 
 
+
+def get_uid():
+    return uuid1().hex
+
+
+def get_exc_info():
+    try:
+        raise Exception
+    except:
+        return sys.exc_info()[2]
 

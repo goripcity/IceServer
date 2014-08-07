@@ -7,7 +7,7 @@ import time
 from heapq import heappop, heappush
 
 
-from util import set_linger, set_keepalive, Timer
+from util import set_linger, set_keepalive, Timer, get_uid
 from log import log
 from action import *
 from schedule import *
@@ -85,14 +85,10 @@ class IceServer(object):
             noblock, keepalive, saveinfo
         """
         
-        fd = sock.fileno()
-        sock.setblocking(0)
-        set_keepalive(sock)
-        self.socks[fd] = (sock, addr)
-        self.sendlist[fd] = []
-        self.log.debug("Accept connection from %s, %d, fd = %d" % (addr[0], addr[1], fd))
-        self.reg_read(fd)
-        return fd, addr
+        uid = self.init_sock(sock, addr)
+        self.log.debug("Accept connection from %s, %d, uid = %s" % (addr[0], addr[1], uid[:8]))
+        self.reg_read(sock.fileno())
+        return uid, addr
 
         
     def wait_read(self, fd, callback):
@@ -109,6 +105,7 @@ class IceServer(object):
   
 
     def set_timer(self, timer):
+        """ add a timer """
         hit = time.time() + timer.elapse
         heappush(self.timer_heap, hit)
         if self.timer_info.has_key(hit):
@@ -177,7 +174,6 @@ class IceServer(object):
     def reg_read(self, fd):
         """ register tcp fd readable event """
 
-        self.recvbuf[fd] = ''
         self.epoll.register(fd, select.EPOLLIN | select.EPOLLET)
         self.callbacks[fd] = (self.event_tcprecv, (fd,))
 
@@ -215,9 +211,10 @@ class IceServer(object):
         uid = self.wait_readevent.get(fd)
 
         if uid:
-            del self.wait_readevent[fd]
-            self.schedule.run(uid, (self.recvbuf[fd], isclosed))
+            buf = self.recvbuf[fd]
             self.recvbuf[fd] = ''
+            del self.wait_readevent[fd]
+            self.schedule.run(uid, (buf, isclosed))
 
 
    
@@ -259,24 +256,42 @@ class IceServer(object):
         self.clear_fd(fd)
 
 
+    def init_sock(self, sock, addr):
+        fd = sock.fileno()
+        self.socks[fd] = (sock, addr)
+        self.sendlist[fd] = []
+        self.recvbuf[fd] = ''
+        
+        uid = self.maps_save(fd)
+
+        sock.setblocking(0)
+        set_keepalive(sock)
+        
+        return uid
+
+
     def clear_fd(self, fd):
         self.epoll.unregister(fd)
+
+        #clean event
+        if self.wait_readevent.has_key(fd):
+            self.schedule.run(self.wait_readevent[fd], ('', True))
+            del self.wait_readevent[fd]
+
+        for uid, _ in self.sendlist[fd]:
+            self.schedule.run(uid, False)
+
         del self.sendlist[fd]
         del self.socks[fd]
         del self.recvbuf[fd]
+        uid = self.maps.get(fd) 
+        del self.maps[fd]
+        del self.maps[uid]
 
         if self.callbacks.has_key(fd):
             del self.callbacks[fd]
 
-        uid = self.maps.get(fd) 
-        if uid:
-            del self.maps[fd]
-            del self.maps[uid]
-            conn.clear_uid(uid)
-
-        if self.wait_readevent.has_key(fd):
-            self.schedule.run(self.wait_readevent[fd], ('', True))
-            del self.wait_readevent[fd]
+        conn.clear(uid)
 
 
     def __kill_it(self, conn):
@@ -327,9 +342,6 @@ class IceServer(object):
 
                 except socket.error, msg:
                     if msg.errno == errno.EAGAIN:        
-                        if send_len == lenth:
-                            self.schedule.run(uid, True)
-                            return 
                         self.epoll.modify(fd, select.EPOLLOUT | select.EPOLLET)                
                         self.sendlist[fd].insert(0, (send_data[send_len:], uid))
                         self.log.debug("Send to [%s:] %s \nLet's have a break, and send \
@@ -338,9 +350,8 @@ class IceServer(object):
                         return 
 
                     else:
+                        self.schedule.run(uid, False)
                         self.tcpsend_errclose(fd, msg)
-                        for data, uid in sendlist:
-                            self.schedule.run(uid, False)
                         return 
 
 
@@ -355,7 +366,6 @@ class IceServer(object):
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            fd = sock.fileno()
             sock.setblocking(0)
             sock.connect(addr)
         except socket.error, msg:
@@ -363,12 +373,10 @@ class IceServer(object):
                 sock.close()
                 return -1
 
-        self.sendlist[fd] = []
-        self.socks[fd] = (sock, addr)
-        self.recvbuf[fd] = ''
-        self.wait_write(fd, self.event_tcpconnect) 
+        uid = self.init_sock(sock, addr)
+        self.wait_write(sock.fileno(), self.event_tcpconnect) 
         
-        return fd
+        return uid
 
 
 
@@ -383,9 +391,7 @@ class IceServer(object):
         """ nonblocking tcp connect callback """
         sock = self.socks[fd][0]
         err_no = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-        if err_no == 0:
-            set_keepalive(sock)
-        else:
+        if err_no != 0:
             self.tcpconn_errclose(fd, err_no)
 
         self.schedule.run(suid, err_no)
@@ -397,20 +403,13 @@ class IceServer(object):
         self.clear_fd(fd)
 
 
-    def maps_save(self, fd, uid = None):
+    def maps_save(self, fd):
         """ save fd:uid, uid:fd """
-        if uid == None:
-            uid = self.schedule.current_uid
+        uid = get_uid()
         self.maps[fd] = uid
         self.maps[uid] = fd
         return uid
 
-
-    def get_uid(self):
-        """ get current schedule uid """
-        return self.schedule.current_uid
-
-      
 
 
 __all__ = ['IceServer', 'Timer']

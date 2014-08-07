@@ -30,8 +30,12 @@ class Connections(object):
         self.uid_actions[uid] = action
 
 
-    def clear_uid(self, uid):
-        del self.uid_actions[uid]
+    def clear(self, uid):
+        if self.uid_actions.has_key(uid):
+            action = self.uid_actions[uid]
+            action.clear(uid)
+            del self.uid_actions[uid]
+            
         
 
     @logic_schedule()

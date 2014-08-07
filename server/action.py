@@ -11,6 +11,7 @@ from conn import *
 from util import Timer
 
 
+
 class TcpServerAction(object):
     """
         action for tcpserver:
@@ -23,6 +24,7 @@ class TcpServerAction(object):
         self.log = log
         self.protocol = Protocol()
         self.logic = BaseLogic()
+
 
     def reg_protocol(self, protocol):
         self.protocol = protocol
@@ -41,14 +43,13 @@ class TcpServerAction(object):
     @logic_schedule(True)
     def event_tcplisten(self, fd):
         """ event tcplisten callback """
-        fd, addr = self.server.event_tcplisten(fd)
-        if fd == -1:
+        uid, addr = self.server.event_tcplisten(fd)
+        if uid == -1:
             yield creturn() 
 
-        uid = self.server.maps_save(fd)
         conn.save_uid(uid, self)
-        self.log.debug("%s: Accept connection from %s, %d, fd = %d" \
-                        % (self.name, addr[0], addr[1], fd)) 
+        self.log.debug("%s: Accept connection from %s, %d, fd = %d uid = %s" \
+                        % (self.name, addr[0], addr[1], fd, uid[:8])) 
         
         yield self.new_connection(uid)
         yield creturn()
@@ -63,11 +64,11 @@ class TcpServerAction(object):
         elif status == -1:
             yield creturn('', True)
         elif status == 0:
-            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data))
+            self.log.debug("[%s] :[%s] received buf :%s" % (self.name, uid[:8], data))
             yield creturn(data, False)
             
         if data[0]:
-            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data[0]))
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid[:8], data[0]))
         yield creturn(data)
         
 
@@ -81,7 +82,7 @@ class TcpServerAction(object):
             yield creturn(False)
             
         if result:
-            self.log.debug("[%s] :[%s] send done :%s" % (self.name, uid, data))
+            self.log.debug("[%s] :[%s] send done :%s" % (self.name, uid[:8], data))
 
         yield creturn(result)
 
@@ -110,7 +111,7 @@ class TcpServerAction(object):
                 result, recvdata, loop = self.protocol.parse(recvdata)
                     
                 data = yield self.logic.dispatch(result, uid)
-                if data:
+                if data and isinstance(data, str): 
                     yield self.sending(uid, data)
                 
         
@@ -118,6 +119,9 @@ class TcpServerAction(object):
 
         yield creturn()
 
+
+    def clear(self, uid):
+        pass
     
 
 class TcpClientAction(object):
@@ -125,6 +129,7 @@ class TcpClientAction(object):
         action for tcp client:
             send request and get response, such as memcache and db
     """
+
     def __init__(self, connect_addr, name, num = 1):
         self.addr = connect_addr
         self.server = None
@@ -135,6 +140,7 @@ class TcpClientAction(object):
         self.logic = BaseLogic()
         self.conn_pool = []
         self.wait_list = []
+        self.signame = self.name + 'requestfd'
         conn.save(self)
 
 
@@ -167,6 +173,7 @@ class TcpClientAction(object):
         uid = yield self.connect(self.addr)
         if uid == -1:
             yield self.server.set_timer(schedule_sleep(5))
+            yield creturn(-1)
 
         status = yield self.protocol.handshake(uid)
         if status == False:
@@ -179,25 +186,22 @@ class TcpClientAction(object):
     
     @logic_schedule()
     def connect(self, addr):
-        fd = self.server.reg_tcp_connect(self.addr)
+        uid = self.server.reg_tcp_connect(self.addr)
 
-        if fd == -1: 
-            self.log.error("[%s] fd: [%d] connect %s error" % (self.name, fd, addr))
-            yield creturn(fd)
+        if uid == -1: 
+            self.log.error("[%s] uid: [%s] connect %s error" % (self.name, uid[:8], addr))
+            yield creturn(-1)
 
-        self.log.debug("[%s] fd: [%d] Try to connect %s" % (self.name, fd, addr))
-        err_no = yield fd
+        self.log.debug("[%s] uid: [%s] Try to connect %s" % (self.name, uid[:8], addr))
+        err_no = yield 
 
         if err_no in (errno.ECONNREFUSED, errno.ETIMEDOUT):
             self.log.error("%s %s Connection refused. Let's wait a moment to retry..." \
                             % (self.name, self.addr))
             yield creturn(-1)
 
-
-        uid = uuid1().hex
-        self.server.maps_save(fd, uid)
         conn.save_uid(uid, self)
-        self.log.debug("[%s] fd: [%d] Connect to %s success" % (self.name, fd, addr))
+        self.log.debug("[%s] uid: [%s] Connect to %s success" % (self.name, uid[:8], addr))
      
         yield creturn(uid)
 
@@ -205,15 +209,14 @@ class TcpClientAction(object):
     @logic_schedule()
     def request(self, data):
         """ send request and get response """
-        SIGNAL = self.name + 'requestfd'
         if len(self.conn_pool) == 0:
-            yield schedule_waitsignal(SIGNAL)
+            yield schedule_waitsignal(self.signame)
 
         uid = self.conn_pool.pop()
 
         status = yield self.sending(uid, data)
         if status == False:
-            yield self.repair(SIGNAL)
+            self.repair()
             yield creturn(False, None)
 
         recvdata = ''
@@ -224,7 +227,7 @@ class TcpClientAction(object):
 
             if isclosed:
                 yield self.logic.close(uid)
-                yield self.repair(SIGNAL)
+                self.repair()
                 yield creturn(False, None)
 
             loop = 1
@@ -235,36 +238,32 @@ class TcpClientAction(object):
                 break
         
         
-        schedule_notify(SIGNAL)
+        schedule_notify(self.signame)
         self.conn_pool.append(uid)
         yield creturn(True, data)
 
 
-    @logic_schedule()
-    def repair(self, SIGNAL):
-        tm = Timer(5, self.reconnect, SIGNAL)
+    def repair(self):
+        tm = Timer(5, self.reconnect)
         self.server.set_timer(tm)
-        yield creturn()
 
 
-    def reconnect(self, SIGNAL):
-        self._reconnect(SIGNAL)
+    def reconnect(self):
+        self._reconnect()
 
 
     @logic_schedule(True)
-    def _reconnect(self, SIGNAL):
+    def _reconnect(self):
         while 1:
             uid = yield self.connection()
             if uid != -1:
                 break
 
-        schedule_notify(SIGNAL)
+        schedule_notify(self.signame)
         self.conn_pool.append(uid)
         yield creturn()
         
          
-        
-
 
     @logic_schedule()
     def recving(self, uid):
@@ -275,11 +274,12 @@ class TcpClientAction(object):
         elif status == -1:
             yield creturn('', True)
         elif status == 0:
-            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data))
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid[:8], data))
             yield creturn(data, False)
             
         if data[0]:
-            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid, data[0]))
+            self.log.debug("[%s] :[%s] received :%s" % (self.name, uid[:8], data[0]))
+
         yield creturn(data)
         
 
@@ -293,9 +293,17 @@ class TcpClientAction(object):
             yield creturn(False)
             
         if result:
-            self.log.debug("[%s] :[%s] send done :%s" % (self.name, uid, data))
+            self.log.debug("[%s] :[%s] send done :%s" % (self.name, uid[:8], data))
 
         yield creturn(result)
+
+
+    def clear(self, uid):
+        if uid in self.conn_pool:
+            self.conn_pool.remove(uid)
+            self.repair()
+
+
 
 
 __all__ = ['TcpServerAction', 'TcpClientAction']

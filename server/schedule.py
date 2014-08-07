@@ -1,10 +1,14 @@
 #coding=utf-8
 
+import sys,time,traceback
+
 from log import log
 from uuid import uuid1
 from functools import wraps
-from util import Timer
+from util import Timer, get_uid, get_exc_info
 
+
+DEBUG = True
 
 class LogicSchedule():
     """
@@ -19,6 +23,7 @@ class LogicSchedule():
         self.return_flag = False
         self.log = log 
 
+        self.stream_record = {}
 
     def join(self, logic_func, uid = None):
         if uid == None:
@@ -26,12 +31,12 @@ class LogicSchedule():
         else:
             self.current_uid = uid 
 
-        #self.log.debug("[%s]: jion func %s" % (uid, logic_func))
         streams = self.logic_streams.get(uid, []) 
         if streams:
             streams.append(logic_func)
         else:
             self.logic_streams[uid] = [logic_func]
+            self.stream_record[uid] = []
 
 
 
@@ -45,13 +50,24 @@ class LogicSchedule():
         streams = self.logic_streams.get(self.current_uid, False)
 
         if streams:
-            #self.log.debug('[%s]: pop' % self.current_uid)
-            streams.pop()
+            func = streams.pop()
+            if DEBUG:
+                self.record(None, func.__name__, 'return')
 
 
 
     def run(self, uid, data):
-        #self.log.debug('schedule running')
+        try:
+            self._run(uid, data)
+        except Exception as e:
+            print traceback.format_exc()
+            if DEBUG:
+                self.show_record(uid)
+            sys.exit(-1)
+    
+
+
+    def _run(self, uid, data):
         if uid == None:
             uid = self.current_uid 
         elif uid == -1:
@@ -63,6 +79,7 @@ class LogicSchedule():
         if not streams:
             return 
 
+
         while True:
             if len(streams) == 0:
                 self.clear(uid)
@@ -71,7 +88,8 @@ class LogicSchedule():
             else:
                 logic_func = streams[-1]
                 
-            #self.log.debug('[%s]: run %s %s' % (uid, logic_func, self.return_flag))
+            if DEBUG:
+                self.record(uid, logic_func.__name__, 'scheduling')
 
             if self.return_flag:
                 data = self.return_data         
@@ -83,6 +101,8 @@ class LogicSchedule():
             if self.return_flag == False:
                 break
                 
+        if DEBUG:
+            self.record(uid, logic_func.__name__, 'pause')
         return 
 
 
@@ -116,7 +136,34 @@ class LogicSchedule():
     def clear(self, uid):
         if self.logic_streams.has_key(uid):
             del self.logic_streams[uid]
+            if DEBUG:
+                self.show_record(uid)
+            del self.stream_record[uid]
 
+
+
+    def record(self, uid, name, comment):
+        if uid == None:
+            uid = self.current_uid
+
+        if len(self.stream_record[uid]) >= 100:
+            return  
+
+        self.stream_record[uid].append("%s %s %s" % (time.strftime("%F %T"), name, comment))
+
+
+
+    def show_record(self, uid):
+        record = self.stream_record.get(uid, [])
+        if len(record) == 0:
+            self.log.debug('No record for %s', uid[:8])
+            return 
+        elif len(record) >= 100:
+            record.append('the following will be left out ...')
+        
+        record.insert(0, "%s Logic stream record" % uid[:8])
+        self.log.debug('\r\n'.join(record)) 
+        
     
 
         
@@ -143,15 +190,24 @@ def logic_schedule(new_logic = False):
             #gen uid
             uid = None
             if new_logic:
-                uid = uuid1().hex
+                uid = get_uid()
 
             #join schedule
             g_logic_schedule.join(generator, uid)
 
             if new_logic:
+                if DEBUG:
+                    g_logic_schedule.record(uid, logic_func.__name__, 'Begin')
                 result = g_logic_schedule.run(uid, None)
             else: #avoid generator nested
+                if DEBUG:
+                    g_logic_schedule.record(None, logic_func.__name__, 'first run')
                 result = generator.next()
+                if DEBUG and g_logic_schedule.return_flag == False:
+                    g_logic_schedule.record(uid, logic_func.__name__, 'pause')
+    
+
+            
 
             return result
 
