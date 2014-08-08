@@ -141,6 +141,7 @@ class TcpClientAction(object):
         self.conn_pool = []
         self.wait_list = []
         self.signame = self.name + 'requestfd'
+        self.ready = False
         conn.save(self)
 
 
@@ -164,6 +165,7 @@ class TcpClientAction(object):
        
         self.conn_pool = conn_pool
 
+        self.ready = True
         yield creturn()
 
 
@@ -209,8 +211,9 @@ class TcpClientAction(object):
     @logic_schedule()
     def request(self, data):
         """ send request and get response """
-        if len(self.conn_pool) == 0:
+        while len(self.conn_pool) == 0:
             yield schedule_waitsignal(self.signame)
+            continue
 
         uid = self.conn_pool.pop()
 
@@ -244,6 +247,7 @@ class TcpClientAction(object):
 
 
     def repair(self):
+        self.log.debug("Repair")
         tm = Timer(5, self.reconnect)
         self.server.set_timer(tm)
 

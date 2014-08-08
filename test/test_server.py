@@ -1,15 +1,23 @@
 #! /usr/bin/env python
 #coding=utf-8
 
+"""
+    Test server, get memcache, get db, return 
+"""
+
+
 import os,sys
 sys.path.append('../')
 from server import *
-from time import sleep
+from time import sleep, time
 
 
 CACHE = ('localhost', 10000)
 DB = ('localhost', 20000)
+SERVER = ('localhost', 7777)
 
+MCERR = 'mcerr'
+DBERR = 'dberr'
 
 class FakeDbServerLogic(BaseLogic):
     def __init__(self):
@@ -53,12 +61,12 @@ class TestLogic(BaseLogic):
         mc = conn.get('MC')
         status, mc_result = yield mc.request(result)
         if status == False:
-            yield creturn('mcerr') 
+            yield creturn(MCERR) 
 
         db = conn.get('DB')
         status, db_result = yield db.request(result)
         if status == False:
-            yield creturn('dberr') 
+            yield creturn(DBERR) 
 
         yield creturn(result + mc_result + db_result)
 
@@ -94,13 +102,14 @@ def fakedb_server():
         
 
 
-def test_server():
+def test_server(num):
     srv = IceServer()
+    srv.log.set('error', 1)
     logic = TestLogic()
-    sa = TcpServerAction(('localhost', 7777))
+    sa = TcpServerAction(SERVER)
     sa.reg_logic(logic)
-    mc = TcpClientAction(CACHE, 'MC', 3)
-    db = TcpClientAction(DB, 'DB', 3)
+    mc = TcpClientAction(CACHE, 'MC', num)
+    db = TcpClientAction(DB, 'DB', num)
     srv.add_action(sa)
     srv.add_action(mc)
     srv.add_action(db)
@@ -111,5 +120,7 @@ def test_server():
 if __name__ == '__main__':
     fakemc_server()
     fakedb_server()
-    test_server()
+    if len(sys.argv) == 2:
+        num = int(sys.argv[1])
+    test_server(num)
 
