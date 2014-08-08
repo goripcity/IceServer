@@ -8,9 +8,9 @@ I'm just tired of write logic with async operate and callbacks, and want to writ
 This server is design to be simple, nonblocking and run single thread only, but scalable and can do lots of tcpserver works.
 
 
-
-Usage
+Build a server
 ---------
+
 
 This is a simplest server, default echo server
 
@@ -23,7 +23,8 @@ This is a simplest server, default echo server
     srv.run()
 
 Then I want do something more, recv string ‘gettime’, and return current time
-    
+   
+    from datetime import datetime
     from server import *
     SERVER = ('localhost', 9999)
     
@@ -56,6 +57,7 @@ This is the Logic class, inherit from class BaseLogic, we'll discuss logic_sched
 But when I use telnet to test this server, the result is not I want because telent send line with '\r\n'.
 So let's add the telnet protocol 
 
+    from datetime import datetime
     from server import *
     SERVER = ('localhost', 9999)
     
@@ -102,9 +104,68 @@ Now, the server is done, and I can use protocol and logic to deal something comp
 
 But in general， servers can't work by their own, they must use something like memcache or database to finish their work.So let's continue
 
+    from datetime import datetime
+    from server import *
+    SERVER = ('localhost', 9999)
+    TIMESERVER = ('localhost', 10000)
+    
+    srv = IceServer()
+    srv_action = TcpServerAction(SERVER)
+    srv_logic = Logic()
+    srv_action.reg_logic(srv_logic)
+
+    srv_protocol = TelnetProtocol()
+    srv_action.reg_protocol(srv_protocol)
+    
+    #--->new code begin :add mc client
+    # we need to add logic and protocol as we built server before, but we assume it's done here
+    
+    tm_client = TcpClientAction(TIMESERVER, 'timeserver', 3)  #address, name, connection pool's num 
+    # TODO add protocol
+    # TODO add logic 
+    srv.add_action(tm_client)
+    #--->new code end
+    
+    srv.add_action(srv_action)
+    srv.run()
+
+Now we build a connections pool and use it
 
 
-
-
-
+    class Logic(BaseLogic):
+        def __init__(self):
+            super(Logic, self).__init__()
+    
+        @logic_schedule()
+        def dispatch(self, result, uid):
+            if result == 'gettime':
+            #--->new code begin : get time from timeserver
+                tm_client = conn.get('timeserver')    #conn is global connetion manager
+                status, result = yield tm_client.request(result)
+                if status:
+                    yield creturn(result)
+            
+            #--->new code end
+                yield creturn(str(datetime.now()))
         
+            yield creturn('command wrong')
+            
+         
+      
+
+Write Protocol
+---------
+
+    #TODO
+
+Write Logic
+---------
+
+    #TODO
+    
+Noitce
+---------
+
+    
+    
+### Thanks for reading
