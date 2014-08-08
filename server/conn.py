@@ -60,6 +60,16 @@ class Connections(object):
         yield creturn(result)
 
 
+    def close(self, uid):
+        action = self.uid_actions.get(uid)
+        if action == None:
+            return False   
+        
+        action.server.close(uid)
+        return True
+
+
+
 conn = Connections()
 
 

@@ -270,6 +270,18 @@ class IceServer(object):
         return uid
 
 
+    def close(self, uid):
+        """ close by server """
+        fd = self.maps.get(uid, -1)
+        if fd == -1:
+            return False
+
+        self.log.debug("Close by server", fd)
+        self.__kill_it(self.socks[fd][0])
+        self.clear_fd(fd)
+
+
+
     def clear_fd(self, fd):
         self.epoll.unregister(fd)
 

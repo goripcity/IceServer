@@ -13,13 +13,19 @@ class BaseProtocol(object):
 
     @logic_schedule()
     def handshake(self, uid):
-        """ connection handshake, close fd here if necessary """
+        """ connection handshake """
         yield creturn(True)
 
 
     @logic_schedule()
     def close(self, uid):
         yield creturn(True)
+
+
+    @logic_schedule()
+    def handle(self, data, uid):
+        yield creturn(self.parse(data)) 
+    
 
 
     def parse(self, data):

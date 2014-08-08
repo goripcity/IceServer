@@ -94,6 +94,7 @@ class TcpServerAction(object):
 
         status = yield self.protocol.handshake(uid)
         if status == False:
+            conn.close(uid)
             yield creturn()
 
         recvdata = ''
@@ -108,7 +109,7 @@ class TcpServerAction(object):
 
             loop = 1
             while loop:
-                result, recvdata, loop = self.protocol.parse(recvdata)
+                result, recvdata, loop = yield self.protocol.handle(recvdata, uid)
                 if result == None:
                     break        
                     
@@ -116,15 +117,13 @@ class TcpServerAction(object):
                 if data and isinstance(data, str): 
                     yield self.sending(uid, data)
                 
-        
-        yield self.protocol.close(uid)
-
         yield creturn()
 
 
     def clear(self, uid):
         pass
-    
+
+
 
 class TcpClientAction(object):
     """
@@ -181,6 +180,7 @@ class TcpClientAction(object):
 
         status = yield self.protocol.handshake(uid)
         if status == False:
+            conn.close(uid)
             yield self.server.set_timer(schedule_sleep(5))
             uid = -1 
 
@@ -236,7 +236,7 @@ class TcpClientAction(object):
                 yield creturn(False, None)
 
             loop = 1
-            result, _, _ = self.protocol.parse(recvdata)
+            result, _, _ = yield self.protocol.handle(recvdata, uid)
                     
             data = yield self.logic.dispatch(result, uid)
             if result:
