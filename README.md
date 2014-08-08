@@ -39,16 +39,17 @@ Then I want do something more, recv string ‘gettime’, and return current tim
     srv.run()
 
 This is the Logic class, inherit from class BaseLogic, we'll discuss logic_schedule() and creturn later
+
     class Logic(BaseLogic):
-    def __init__(self):
-        super(Logic, self).__init__()
+        def __init__(self):
+            super(Logic, self).__init__()
     
-    @logic_schedule()
-    def dispatch(self, result, uid):
-        if result == 'gettime':
-            yield creturn(str(datetime.now()))
+        @logic_schedule()
+        def dispatch(self, result, uid):
+            if result == 'gettime':
+                yield creturn(str(datetime.now()))
         
-        yield creturn('command wrong')
+            yield creturn('command wrong')
 
 
 
