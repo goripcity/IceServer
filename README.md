@@ -3,16 +3,16 @@ IceServer
 
 Ice = LIghtweight, with Coroutine, use Epoll for event-driven server framework for Linux,  write in Python
 
-I'm just tired of write logic with async operate and callbacks, and want to write async operate as sync operate, step by step. Twisted is cool and can do what I want, but it's too large and complex. 
+I'm just tired of writing logic with async operate and lots of callbacks, and want to write async operate like writing  sync operate, step by step. Twisted is cool and can do what I want, but it's too large and complex. 
     
-This server is design to be simple, nonblocking and run single thread only, but scalable and can do lots of tcpserver works.
+This server is designed to be simple, nonblocking and running in single thread only, but scalable and can do lots of tcpserver works.
 
 
 Build a server
 ---------
 
 
-This is a simplest server, default echo server
+This is a simplest echo server
 
     from server import *
     SERVER = ('localhost', 9999)
@@ -22,7 +22,7 @@ This is a simplest server, default echo server
     srv.add_action(srv_action)
     srv.run()
 
-Then I want do something more, recv string ‘gettime’, and return current time
+Then I want to do something more: recv string ‘gettime’, and return current time
    
     from datetime import datetime
     from server import *
@@ -54,7 +54,7 @@ This is the Logic class, inherit from class BaseLogic, we'll discuss logic_sched
 
 
 
-But when I use telnet to test this server, the result is not I want because telent send line with '\r\n'.
+But when I used telnet to test this server, the result was not as I excepted,  because telent sends line with '\r\n'.
 So let's add the telnet protocol 
 
     from datetime import datetime
@@ -102,7 +102,8 @@ from socket is stream
         
 Now, the server is done, and I can use protocol and logic to deal something complex.
 
-But in general， servers can't work by their own, they must use something like memcache or database to finish their work.So let's continue
+But in general, servers can't work by their own, they must use something like memcache or database to finish 
+their work. So let's continue.
 
     from datetime import datetime
     from server import *
@@ -129,7 +130,7 @@ But in general， servers can't work by their own, they must use something like 
     srv.add_action(srv_action)
     srv.run()
 
-Now we build a connections pool and use it
+Now we build a connections pool and use it in logic.dispatch
 
 
     class Logic(BaseLogic):
