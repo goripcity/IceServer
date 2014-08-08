@@ -7,10 +7,20 @@ Ice = LIghtweight, with Coroutine, use Epoll for event-driven server framework f
 Usage
 ---------
 
-###
-        test
-        test
+This is a simplest server, default echo server
 
+    from server import *
+    SERVER = ('localhost', 9999)
+
+    srv = IceServer()
+    srv_action = TcpServerAction(SERVER)
+    srv.add_action(srv_action)
+    srv.run()
+
+tobecontinued ...
     
-    test
-    test    
+
+        
+    
+        
+        
