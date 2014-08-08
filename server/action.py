@@ -130,7 +130,7 @@ class TcpClientAction(object):
             send request and get response, such as memcache and db
     """
 
-    def __init__(self, connect_addr, name, num = 1):
+    def __init__(self, connect_addr, name, num = 3):
         self.addr = connect_addr
         self.server = None
         self.name = name

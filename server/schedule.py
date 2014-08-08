@@ -1,6 +1,7 @@
 #coding=utf-8
 
 import sys,time,traceback
+from datetime import datetime
 
 from log import log
 from uuid import uuid1
@@ -8,7 +9,8 @@ from functools import wraps
 from util import Timer, get_uid, get_exc_info
 
 
-DEBUG = True
+DEBUG = False
+#DEBUG = True
 
 class LogicSchedule():
     """
@@ -151,7 +153,7 @@ class LogicSchedule():
         if len(self.stream_record[uid]) >= 100:
             return  
 
-        self.stream_record[uid].append("%s %s %s" % (time.strftime("%F %T"), name, comment))
+        self.stream_record[uid].append("%s %s %s" % (datetime.now(), name, comment))
 
 
 
