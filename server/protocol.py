@@ -5,7 +5,7 @@ from schedule import *
 from conn import conn
 
 
-class Protocol(object):
+class BaseProtocol(object):
     def __init__(self):
         self.log = log
         self.conn = conn
@@ -38,4 +38,4 @@ class Protocol(object):
 
 
 
-__all__ = ['Protocol']
+__all__ = ['BaseProtocol']

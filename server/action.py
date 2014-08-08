@@ -5,7 +5,7 @@ from uuid import uuid1
 
 from log import log
 from schedule import *
-from protocol import Protocol
+from protocol import BaseProtocol
 from logic import *
 from conn import *
 from util import Timer
@@ -22,7 +22,7 @@ class TcpServerAction(object):
         self.server = None
         self.name = name if name else 'Port-%s' % listen_addr[1] 
         self.log = log
-        self.protocol = Protocol()
+        self.protocol = BaseProtocol()
         self.logic = BaseLogic()
 
 
@@ -109,6 +109,8 @@ class TcpServerAction(object):
             loop = 1
             while loop:
                 result, recvdata, loop = self.protocol.parse(recvdata)
+                if result == None:
+                    break        
                     
                 data = yield self.logic.dispatch(result, uid)
                 if data and isinstance(data, str): 
@@ -136,7 +138,7 @@ class TcpClientAction(object):
         self.name = name
         self.num = num
         self.log = log
-        self.protocol = Protocol()
+        self.protocol = BaseProtocol()
         self.logic = BaseLogic()
         self.conn_pool = []
         self.wait_list = []
