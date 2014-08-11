@@ -59,6 +59,10 @@ def set_keepalive(sock, alive = 1):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, alive)
 
 
+def set_nodelay(sock, nodelay = 1):
+    """tcp nodelay 0/1 off/on"""
+    sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, nodelay)
+
 
 def get_uid():
     return uuid1().hex

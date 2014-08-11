@@ -31,7 +31,7 @@ class FakeDbServerLogic(BaseLogic):
 
 
     def db_opt(self):
-        sleep(0.01) 
+        #sleep(0.01) 
         return "DB"
     
 
@@ -47,7 +47,7 @@ class FakeMcServerLogic(BaseLogic):
 
 
     def mc_opt(self):
-        sleep(0.01) 
+        #sleep(0.01) 
         return "MC"
     
     

@@ -7,7 +7,7 @@ import time
 from heapq import heappop, heappush
 
 
-from util import set_linger, set_keepalive, Timer, get_uid
+from util import set_linger, set_keepalive, Timer, get_uid, set_nodelay
 from log import log
 from action import *
 from schedule import *
@@ -266,6 +266,7 @@ class IceServer(object):
 
         sock.setblocking(0)
         set_keepalive(sock)
+        set_nodelay(sock)
         
         return uid
 
