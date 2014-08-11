@@ -153,19 +153,22 @@ Now we build a connections pool and use it in logic.dispatch
             
          
       
-
 Write Protocol
 ---------
+As is mentioned above， a new protocol class must rewrite "parse" and "packet"，maybe need to rewrite “handshake” and “handle”. Read actions.py and protocol.py for more details
 
-    #TODO
 
 Write Logic
 ---------
 
-    #TODO
+Just rewrite "dispatch" and add your own logic funcitions
+
     
 Noitce
 ---------
+
+Each function with async operate must use Decorator "@logic_schedule()" and use "yield" to wait for return
+Each function with logic_schedule() must use "yield creturn(*args)" to return, or it will raise an error.
 
     
     
