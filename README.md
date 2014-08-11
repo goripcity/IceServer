@@ -155,13 +155,13 @@ Now we build a connections pool and use it in logic.dispatch
       
 Write Protocol
 ---------
-As is mentioned above， a new protocol class must rewrite "parse" and "packet"，maybe need to rewrite “handshake” and “handle”. Read actions.py and protocol.py for more details.
+As is mentioned above， a new protocol class must override "parse" and "packet"，maybe need to override “handshake” and “handle”. Read actions.py and protocol.py for more details.
 
 
 Write Logic
 ---------
 
-Just rewrite "dispatch" and add your own logic functions.
+Just override "dispatch" and add your own logic functions.
 
     
 Noitce
