@@ -104,7 +104,8 @@ class TcpServerAction(object):
             recvdata += data
             
             if isclosed:
-                self.logic.close(uid)
+                yield self.protocol.close(uid)
+                yield self.logic.close(uid)
                 yield creturn()
 
             loop = 1
@@ -231,6 +232,7 @@ class TcpClientAction(object):
             recvdata += data
 
             if isclosed:
+                yield self.protocol.close(uid)
                 yield self.logic.close(uid)
                 self.repair()
                 yield creturn(False, None)
