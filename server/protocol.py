@@ -38,8 +38,8 @@ class BaseProtocol(object):
         return result, '',  False
 
 
-    def packet(self, *args):
-        result = args[0]
+    def packet(self, data):
+        result = args
         return result 
 
 

@@ -6,7 +6,7 @@ sys.path.append('../')
 
 import unittest
 from unittest import TestCase
-from protocol import HttpParser
+from protocol import HttpParser, HttpPacket
 
 REQUEST_GET = """GET /scripts/S?name=value&nam&=& HTTP/1.1
 Host: static.blog.csdn.net
@@ -71,6 +71,7 @@ X-Powered-By: ASP.NET
 class HttpTest(TestCase):
     def setUp(self):
         self.parser = HttpParser()
+        self.packet = HttpPacket()
 
 
     def compare_get(self):
@@ -208,6 +209,31 @@ class HttpTest(TestCase):
         self.compare_get()
 
         
+    def test_req_packet(self):
+        args = {'urlname':'urlvalue', 'urlname1':'urlvalue1'}
+        cookie = {'cookie1':'cv1', 'cookie2':'cv2'}
+        headers = {'header1': 'hv1', 'header2': 'hv2'}
+        body = 'This is a test packet'
+        self.packet.request('POST', '/testurl', args=args, 
+                            headers=headers, cookie=cookie, body=body)
+        
+        result, _, status = self.parser.parse(self.packet.packet())
+        self.assertNotEqual(result, None)
+
+
+
+    def test_res_packet(self):
+        cookie = {'cookie1':'cv1', 'cookie2':'cv2'}
+        headers = {'header1': 'hv1', 'header2': 'hv2'}
+        body = 'This is a test packet'
+
+        self.packet.response(200, headers=headers, cookie=cookie, body=body)
+        result, _, status = self.parser.parse(self.packet.packet())
+        self.assertNotEqual(result, None)
+        self.assertEqual(self.parser.reason, 'ok')
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
