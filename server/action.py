@@ -75,7 +75,8 @@ class TcpServerAction(object):
     @logic_schedule()
     def sending(self, uid, data):
         """ return True/False """
-        status = self.server.event_write(uid, self.protocol.packet(data))
+        data = self.protocol.packet(data)
+        status = self.server.event_write(uid, data)
         if status:
             result = yield status
         else:
@@ -115,7 +116,7 @@ class TcpServerAction(object):
                     break        
                     
                 data = yield self.logic.dispatch(result, uid)
-                if data and isinstance(data, str): 
+                if data: 
                     yield self.sending(uid, data)
                 
         yield creturn()
@@ -294,7 +295,8 @@ class TcpClientAction(object):
     @logic_schedule()
     def sending(self, uid, data):
         """ return True/False """
-        status = self.server.event_write(uid, self.protocol.packet(data))
+        data = self.protocol.packet(data)
+        status = self.server.event_write(uid, data)
         if status:
             result = yield status
         else:

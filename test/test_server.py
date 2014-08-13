@@ -9,6 +9,7 @@
 import os,sys
 sys.path.append('../')
 from server import *
+from protocol import *
 from time import sleep, time
 
 
@@ -55,20 +56,29 @@ class FakeMcServerLogic(BaseLogic):
 class TestLogic(BaseLogic):
     def __init__(self):
         super(TestLogic, self).__init__()
+
+
+    def packet(self, data):
+        packet = HttpPacket()
+        packet.response(200, body = data)
+        return packet
+        
     
     @logic_schedule()
     def dispatch(self, result, fd):
+        body = result.body
+        result = result.method
         mc = conn.get('MC')
         status, mc_result = yield mc.request(result)
         if status == False:
-            yield creturn(MCERR) 
+            yield creturn(self.packet(MCERR)) 
 
         db = conn.get('DB')
         status, db_result = yield db.request(result)
         if status == False:
-            yield creturn(DBERR) 
+            yield creturn(self,packet(DBERR)) 
 
-        yield creturn(result + mc_result + db_result)
+        yield creturn(self.packet(body + mc_result + db_result))
 
 
 def fakemc_server():
@@ -107,6 +117,7 @@ def test_server(num):
     srv.log.set('error', 1)
     logic = TestLogic()
     sa = TcpServerAction(SERVER)
+    sa.reg_protocol(HttpProtocol())
     sa.reg_logic(logic)
     mc = TcpClientAction(CACHE, 'MC', num)
     db = TcpClientAction(DB, 'DB', num)

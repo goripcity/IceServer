@@ -39,7 +39,7 @@ class BaseProtocol(object):
 
 
     def packet(self, data):
-        result = args
+        result = data
         return result 
 
 

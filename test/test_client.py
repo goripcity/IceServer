@@ -4,6 +4,7 @@
 import os,sys
 sys.path.append('../')
 from server import *
+from protocol import *
 from test_server import SERVER, MCERR, DBERR
 import time
 from datetime import datetime
@@ -45,7 +46,10 @@ def run_clients(srv, client):
     
     start = time.time()
     global request
-    status, result = yield client.request('test')
+    req = HttpPacket()
+    req.request('POST', 'testurl', body='test')
+    status, result = yield client.request(req)
+    result = result.body
     if status == False:
         request['fail'] += 1 
     elif result == MCERR:
@@ -74,13 +78,15 @@ def run_test(srv, client, time = 1):
 
 
 
+
 def main():
     global g_connect
     if len(sys.argv) == 2:
         g_connect = int(sys.argv[1])
     srv = IceServer()
     srv.log.set('error', 1)
-    client = TcpClientAction(SERVER, 'MC', g_connect)
+    client = TcpClientAction(SERVER, 'Client', g_connect)
+    client.reg_protocol(HttpProtocol())
     srv.add_action(client)
     for i in range(0, g_connect):
         run_test(srv, client)

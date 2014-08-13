@@ -228,9 +228,8 @@ class IceServer(object):
         try:
             data = sock.recv(BUFSIZ)
             if not data:
-                if recvdata == '': 
-                    self.tcpread_close(fd)
-                    return False, recvdata, True
+                self.tcpread_close(fd)
+                return False, recvdata, True
             else:
                 recvdata += data
                 return True, recvdata, False

@@ -98,6 +98,7 @@ class HttpParser(object):
         self.cursor = 0
         self.stage = 0    # 0 new package  1 parsing header 2 parsing body
         self.headerlen = 0
+        self.body = ''
         self.last_pairs = []
                         
 
