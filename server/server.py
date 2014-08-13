@@ -39,6 +39,7 @@ class IceServer(object):
         self.maps = {}                          #save {fd: uid, uid: fd}
         self.wait_readevent = {}                #save schedule uid which is 
                                                 #waiting for read event {fd: uid} 
+        self.read_timeout = {}                  #save {uid: timeout}
         
         self.timer_heap = []                    #timer minheap
         self.timer_info = {}                    #timer info  key = time
@@ -180,7 +181,7 @@ class IceServer(object):
         return True
 
 
-    def event_read(self, uid):
+    def event_read(self, uid, timeout = -1):
         """ read form recvbuf or wait event"""
         fd = self.maps.get(uid, -1)
         if fd == -1:
@@ -191,10 +192,21 @@ class IceServer(object):
             self.recvbuf[fd] = ''
             return 0, buf
         else:
+            if timeout != -1:
+                self.read_timeout[uid] = timeout
+                tm = Timer(timeout, self.timeout_read, uid)
+                self.set_timer(tm)
             self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
             self.callbacks[fd] = (self.event_tcprecv, (fd,))
             self.wait_readevent[fd] = self.schedule.current_uid
             return 1, None 
+
+
+    def timeout_read(self, uid):
+        if self.read_timeout.has_key(uid):
+            fd = self.maps.get(uid, -1)
+            if fd != -1:
+                self.tcpread_errclose(fd, 'Timeout')
 
 
 
@@ -207,6 +219,9 @@ class IceServer(object):
 
         if not isclosed:
             self.recvbuf[fd] += recvdata
+            if len(self.recvbuf[fd]) > MAXPACKET:
+                self.tcpread_errclose(fd, "Packet too long")
+                return 
 
         uid = self.wait_readevent.get(fd)
 
@@ -214,6 +229,8 @@ class IceServer(object):
             buf = self.recvbuf[fd]
             self.recvbuf[fd] = ''
             del self.wait_readevent[fd]
+            if self.read_timeout.has_key(uid):
+                del self.read_timeout[uid]
             self.schedule.run(uid, (buf, isclosed))
 
 
@@ -238,7 +255,7 @@ class IceServer(object):
             if msg.errno == errno.EAGAIN:
                 return False, recvdata, False
             else:
-                self.tcpread_errclose(fd, msg)
+                self.tcpread_errclose(fd, msg.strerror)
                 return False, recvdata, True
 
 
@@ -250,7 +267,7 @@ class IceServer(object):
 
 
     def tcpread_errclose(self, fd, msg):
-        self.log.info("Tcp_read error [%s] : %s" % (fd, msg.strerror))
+        self.log.info("Tcp_read error [%s] : %s" % (fd, msg))
         self.__kill_it(self.socks[fd][0])
         self.clear_fd(fd)
 
@@ -369,7 +386,7 @@ class IceServer(object):
 
     def tcpsend_errclose(self, fd, msg):
         self.log.debug("Tcp_send error [%s] : %s" % (fd, msg.strerror))
-        self.__kill_it(self.socks[fd]['conn'])
+        self.__kill_it(self.socks[fd][0])
         self.clear_fd(fd)
 
 
@@ -424,7 +441,7 @@ class IceServer(object):
 
 
 
-__all__ = ['IceServer', 'Timer']
+__all__ = ['IceServer']
 
 
 
