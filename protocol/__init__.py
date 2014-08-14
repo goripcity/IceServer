@@ -1,2 +1,2 @@
 from http import *
-from httpproto import *
+#from httpproto import *

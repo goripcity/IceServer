@@ -56,9 +56,9 @@ class TcpServerAction(object):
 
 
     @logic_schedule()
-    def recving(self, uid):
+    def recving(self, uid, timeout = -1):
         """ return data, True/False (fd is closed?) """
-        status, data = self.server.event_read(uid)
+        status, data = self.server.event_read(uid, timeout)
         if status == 1 :
             data = yield status
         elif status == -1:
@@ -213,7 +213,7 @@ class TcpClientAction(object):
 
 
     @logic_schedule()
-    def request(self, data):
+    def request(self, data, timeout = -1):
         """ send request and get response """
         while len(self.conn_pool) == 0:
             yield schedule_waitsignal(self.signame)
@@ -229,7 +229,7 @@ class TcpClientAction(object):
         recvdata = ''
  
         while 1:
-            data, isclosed = yield self.recving(uid)
+            data, isclosed = yield self.recving(uid, timeout)
             recvdata += data
 
             if isclosed:
@@ -275,9 +275,9 @@ class TcpClientAction(object):
          
 
     @logic_schedule()
-    def recving(self, uid):
+    def recving(self, uid, timeout = -1):
         """ return data, True/False (fd is closed?) """
-        status, data = self.server.event_read(uid)
+        status, data = self.server.event_read(uid, timeout)
         if status == 1 :
             data = yield status
         elif status == -1:
