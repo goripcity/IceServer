@@ -87,7 +87,11 @@ class IceServer(object):
         
         uid = self.init_sock(sock, addr)
         self.log.debug("Accept connection from %s, %d, uid = %s" % (addr[0], addr[1], uid[:8]))
-        self.reg_read(sock.fileno())
+        fd = sock.fileno()
+
+        self.epoll.register(fd, select.EPOLLIN | select.EPOLLET)
+        self.callbacks[fd] = (self.event_tcprecv, (fd,))
+
         return uid, addr
 
         
@@ -170,14 +174,6 @@ class IceServer(object):
         elif hasattr(action, 'create_pool'):
             action.create_pool()
 
-
-    def reg_read(self, fd):
-        """ register tcp fd readable event """
-
-        self.epoll.register(fd, select.EPOLLIN | select.EPOLLET)
-        self.callbacks[fd] = (self.event_tcprecv, (fd,))
-
-        return True
 
 
     def event_read(self, uid):
@@ -386,16 +382,11 @@ class IceServer(object):
                 return -1
 
         uid = self.init_sock(sock, addr)
-        self.wait_write(sock.fileno(), self.event_tcpconnect) 
+        fd = sock.fileno()
+        self.callbacks[fd] = (self.event_tcpconnect, (fd, self.schedule.current_uid))
+        self.epoll.register(fd, select.EPOLLOUT| select.EPOLLET)
         
         return uid
-
-
-
-    def wait_write(self, fd, callback):
-        """ register writeable event, such as tcp connect ready"""
-        self.callbacks[fd] = (callback, (fd, self.schedule.current_uid))
-        self.epoll.register(fd, select.EPOLLOUT| select.EPOLLET)
 
 
 

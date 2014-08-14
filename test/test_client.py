@@ -12,6 +12,8 @@ from datetime import datetime
 
 g_connect = 1
 
+LOOP = False
+
 request = {}
 request['all'] = 0
 request['succeed'] = 0
@@ -65,7 +67,8 @@ def run_clients(srv, client):
     if request['all'] % g_connect == 0:
         report()
 
-    run_test(srv, client, 0)
+    if LOOP:
+        run_test(srv, client, 0)
 
     yield creturn()
 
