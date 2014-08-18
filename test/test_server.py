@@ -114,7 +114,7 @@ def fakedb_server():
 
 def test_server(num):
     srv = IceServer()
-    srv.log.set('error', 1)
+    #srv.log.set('error', 1)
     logic = TestLogic()
     sa = TcpServerAction(SERVER)
     sa.reg_protocol(HttpProtocol())

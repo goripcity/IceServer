@@ -37,7 +37,7 @@ class TcpServerAction(object):
     def tcp_listen(self):
         """ register tcp listen in server"""
         fd = self.server.tcp_listen(self.addr)
-        self.server.wait_read(fd, self.event_tcplisten)
+        self.server.wait_read(fd, self.event_tcplisten, fd)
 
 
     @logic_schedule(True)
@@ -148,6 +148,10 @@ class TcpClientAction(object):
         conn.save(self)
 
 
+    def init(self):
+        pass
+
+
     def reg_protocol(self, protocol):
         self.protocol = protocol
 
@@ -159,6 +163,7 @@ class TcpClientAction(object):
     @logic_schedule(True)
     def create_pool(self):
         """ create a connection pool """
+        self.init()
         conn_pool = []
         
         while len(conn_pool) < self.num:

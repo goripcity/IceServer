@@ -17,6 +17,8 @@ from conn import conn
 BUFSIZ = 8092
 MAXPACKET = 2 << 19
 LISTEN_LIST = 1024
+EVREAD = 1
+EVWRITE = 2
 
     
 
@@ -31,6 +33,7 @@ class IceServer(object):
         self.log = log                          #log
         self.polltime = -1                      #epoll wait time
         self.socks = {}                         #save sockets  {fd: (socket, addr)}
+        self.events = {}                        #save {fd: events}
         self.actions = []                       #save actions 
         self.callbacks = {}                     #save callbacks {fd or uid: (callback, *args)}
         self.schedule = g_logic_schedule        #global schedule
@@ -96,12 +99,46 @@ class IceServer(object):
         return uid, addr
 
         
-    def wait_read(self, fd, callback):
-        """ register readable event, such as tcp listen ready"""
-            
-        self.callbacks[fd] = (callback, (fd,))
-        self.epoll.register(fd, select.EPOLLIN)
+    def wait_read(self, fd, callback, *args):
+        """ add readable event"""
+
+        if not self.events.has_key(fd):
+            self.epoll.register(fd, select.EPOLLIN)
+        elif self.events[fd] & EVREAD == 0:
+            #for hiredis, write > read 
+            return 
+        else:
+            self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
+
+        self.events[fd] = EVREAD
+        self.callbacks[fd] = (callback, args)
     
+    
+
+    def wait_write(self, fd, callback, *args):
+        """ add writeable event"""
+
+        if self.events.has_key(fd):
+            self.epoll.modify(fd, select.EPOLLOUT | select.EPOLLET)
+        else:
+            self.epoll.register(fd, select.EPOLLOUT | select.EPOLLET )
+            
+        self.events[fd] = EVWRITE
+        self.callbacks[fd] = (callback, args)
+
+
+
+    def del_write(self, fd):
+        """ must del_write before wait_read """
+        self.events[fd] = EVREAD
+
+
+    def clean_up(self, fd):
+        """ clean fd """
+        del self.events[fd]
+        self.epoll.unregister(fd)
+        
+
 
     def run(self):
         while True:
@@ -271,6 +308,7 @@ class IceServer(object):
     def init_sock(self, sock, addr):
         fd = sock.fileno()
         self.socks[fd] = (sock, addr)
+        self.events[fd] = 0
         self.sendlist[fd] = []
         self.recvbuf[fd] = ''
         
@@ -309,6 +347,7 @@ class IceServer(object):
         del self.sendlist[fd]
         del self.socks[fd]
         del self.recvbuf[fd]
+        del self.events[fd]
         uid = self.maps.get(fd) 
         del self.maps[fd]
         del self.maps[uid]
@@ -360,6 +399,9 @@ class IceServer(object):
                 try:
                     send_len += sock.send(send_data)
                     if send_len == lenth:
+                        #change event to read
+                        self.epoll.modify(fd, select.EPOLLIN | select.EPOLLET)
+                        self.callbacks[fd] = (self.event_tcprecv, (fd,))
                         self.schedule.run(uid, True)
                         break
                     else:
