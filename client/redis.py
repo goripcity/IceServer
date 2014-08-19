@@ -86,6 +86,7 @@ class RedisClientAction(TcpClientAction):
         
         p = cast(ac[0].ev.data, c_char_p)
         del self.contexts[p.value]
+        self.repair()
 
 
 
@@ -95,7 +96,7 @@ class RedisClientAction(TcpClientAction):
         fd = ac[0].c.fd
         suid = self.sd_wait[fd]
         del self.sd_wait[fd] 
-        p = cast(p, c_char_p)
+        p = cast(ac[0].ev.data, c_char_p)
         fd, acn = self.contexts[p.value]
         r = cast(r, POINTER(redisReply))
 
@@ -139,7 +140,7 @@ class RedisClientAction(TcpClientAction):
 
     @logic_schedule()
     def connect(self, addr):
-        status, acn = self.redis.async_connect(addr[0], 6379)
+        status, acn = self.redis.async_connect(addr[0], addr[1])
         if status == False:
             self.log.error("[%s] : connect %s error" % (self.name, addr))
             yield creturn(-1)
@@ -154,7 +155,7 @@ class RedisClientAction(TcpClientAction):
 
         self.log.debug("[%s] : Connect to %s success" % (self.name, addr))
 
-        acn.set_callback(self.redis_callback, acn.context[0].ev.data)
+        acn.set_callback(self.redis_callback)
 
         yield creturn(acn)
 
@@ -162,15 +163,17 @@ class RedisClientAction(TcpClientAction):
 
     @logic_schedule()
     def pop_client(self):
+        while len(self.conn_pool) == 0:
+            yield schedule_waitsignal(self.signame)
+            continue
+
         ac = self.conn_pool.pop()
         yield creturn(ac)
 
 
 
-    @logic_schedule()
-    def push_client(self):
-        pass
-
-    
+    def push_client(self, ac):
+        schedule_notify(self.signame)
+        self.conn_pool.append(ac)
 
 
